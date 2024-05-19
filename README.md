@@ -135,7 +135,7 @@ Y rather than everything past position Y.
         - `export AWS_ACCESS_KEY_ID=test`
         - `export AWS_SECRET_ACCESS_KEY=test`
         - `export AWS_DEFAULT_REGION=us-east-1`
-4. Create an initial bucket for local testing: `aws s3api create-bucket test-bucket`
+4. Create an initial bucket for local testing: `aws s3api create-bucket --bucket test-bucket`
 
 **NOTE:** You can also use localstack/localstack:s3-latest in step 1 if you want to just run localstack S3 without other services
 
@@ -152,7 +152,7 @@ poetry install
 2. Run static tests and validations against code
 
 ```
-poetry run black
+poetry run black sure_challenge/
 poetry run pytest
 ```
 
@@ -173,6 +173,7 @@ deleted in full.
 
 ```
 export DEPLOYMENT_RETENTION=3
+export DEPLOYMENT_BUCKET='test-bucket'
 poetry run sure_challenge/deployment_cleaner.py
 ```
 

@@ -3,6 +3,7 @@ from optparse import OptionParser
 import boto3
 import random
 import requests
+import time
 import sys
 
 s3 = boto3.client("s3")
@@ -23,6 +24,7 @@ SAMPLE_KEYS = [
     "png/hey.png",
 ]
 
+
 def random_deploy_name():
     base_name = FUZZ_WORDS[random.randint(0, len(FUZZ_WORDS))].decode("utf-8")
     random_int = random.randint(1000, 9999)
@@ -36,22 +38,31 @@ def create_deployment(bucket, deploy_name):
 
 def main(args):
     parser = OptionParser()
-    parser.add_option('-n', '--deploy_count', dest = 'deploy_count',
-                      type = 'int',
-                      default = 1,
-                      help = 'specify the number of fake deployments to create')
-    parser.add_option('-b', '--bucket_name', dest = 'bucket_name',
-                      type = 'string',
-                      default = "test-bucket",
-                      help = 'specify the S3 bucket to manage')
+    parser.add_option(
+        "-n",
+        "--deploy_count",
+        dest="deploy_count",
+        type="int",
+        default=1,
+        help="specify the number of fake deployments to create",
+    )
+    parser.add_option(
+        "-b",
+        "--bucket_name",
+        dest="bucket_name",
+        type="string",
+        default="test-bucket",
+        help="specify the S3 bucket to manage",
+    )
 
     (options, args) = parser.parse_args()
-    if (options.bucket_name == None):
-        print (parser.usage)
+    if options.bucket_name == None:
+        print(parser.usage)
         sys.exit(0)
 
     for _ in range(options.deploy_count):
         create_deployment(options.bucket_name, random_deploy_name())
+        time.sleep(1)
 
 
 if __name__ == "__main__":
