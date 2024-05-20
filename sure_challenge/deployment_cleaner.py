@@ -1,66 +1,62 @@
 #!/usr/bin/env python3
-from optparse import OptionParser
+import logging
 import boto3
-import random
-import requests
 import sys
-
-s3 = boto3.client("s3")
-word_site = "https://www.mit.edu/~ecprice/wordlist.10000"
-response = requests.get(word_site)
-ALL_WORDS = response.content.splitlines()
-FUZZ_WORDS = [word for word in ALL_WORDS if len(word) > 5]
-
-SAMPLE_KEYS = [
-    "index.html",
-    "base.html",
-    "root.html",
-    "css/font.css",
-    "images/hey.png",
-    "styles/font.css",
-    "img/hey.png",
-    "fonts/font.css",
-    "png/hey.png",
-]
+import os
 
 
-def random_deploy_name():
-    base_name = FUZZ_WORDS[random.randint(0, len(FUZZ_WORDS))].decode("utf-8")
-    random_int = random.randint(1000, 9999)
-    return f"{base_name}_{random_int}"
+logging.basicConfig()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+s3 = boto3.resource("s3")
 
 
-def create_deployment(bucket, deploy_name):
-    for file_name in random.sample(SAMPLE_KEYS, 3):
-        s3.put_object(Bucket=bucket, Key=f"{deploy_name}/{file_name}")
+def get_timestamped_deployments(bucket):
+    timestamped_deployments = []
+    bucket_objets = bucket.meta.client.list_objects(Bucket=bucket.name, Delimiter="/")
+
+    for o in bucket_objets.get("CommonPrefixes"):
+        prefix = o.get("Prefix")
+
+        # Grab a single key object from each deployment prefix to act as a
+        # representative for retrieving timestamp information.
+        deployment_object = next(iter(bucket.objects.filter(Prefix=prefix)))
+        timestamped_deployments.append(
+            (prefix, deployment_object.key, deployment_object.last_modified)
+        )
+    return timestamped_deployments
+
+
+def deployments_by_age(timestamped_deployments, deployment_retention):
+    timestamped_deployments.sort(key=lambda x: x[2], reverse=True)
+    for deployment in timestamped_deployments[deployment_retention:]:
+        logger.info(f"Removing out of date deployment {deployment[0]}")
+        yield deployment
+
+
+def delete_by_prefix(bucket, deployment):
+    try:
+        bucket.objects.filter(Prefix=deployment[0]).delete()
+    except Exception as err:
+        logger.error(f"Removing out of date deployment: {err=}")
+        print(f"Unexpected {err=}")
+        raise
 
 
 def main(args):
-    parser = OptionParser()
-    parser.add_option(
-        "-n",
-        "--deploy_count",
-        dest="deploy_count",
-        type="int",
-        default=1,
-        help="specify the number of fake deployments to create",
-    )
-    parser.add_option(
-        "-b",
-        "--bucket_name",
-        dest="bucket_name",
-        type="string",
-        default="test-bucket",
-        help="specify the S3 bucket to manage",
-    )
+    try:
+        deployment_retention = int(os.environ["DEPLOYMENT_RETENTION"])
+        deployment_bucket = os.environ["DEPLOYMENT_BUCKET"]
+    except:
+        sys.exit("Must set environment vars DEPLOYMENT_RETENTION and DEPLOYMENT_BUCKET")
 
-    (options, args) = parser.parse_args()
-    if options.bucket_name == None:
-        print(parser.usage)
-        sys.exit(0)
+    bucket = s3.Bucket(deployment_bucket)
 
-    for _ in range(options.deploy_count):
-        create_deployment(options.bucket_name, random_deploy_name())
+    timestamped_deployments = get_timestamped_deployments(bucket)
+
+    for deployment in deployments_by_age(timestamped_deployments, deployment_retention):
+        delete_by_prefix(bucket, deployment)
 
 
 if __name__ == "__main__":
